@@ -81,7 +81,7 @@ export class GhiuSettingTab extends PluginSettingTab {
     this.renderTarget(containerEl);
     this.renderNaming(containerEl);
     this.renderLinks(containerEl);
-    this.renderBehaviour(containerEl);
+    this.renderBehavior(containerEl);
   }
 
   private get s(): GhiuSettings {
@@ -337,10 +337,10 @@ export class GhiuSettingTab extends PluginSettingTab {
     }
   }
 
-  // ---- behaviour ----
+  // ---- behavior ----
 
-  private renderBehaviour(root: HTMLElement): void {
-    new Setting(root).setName("Behaviour").setHeading();
+  private renderBehavior(root: HTMLElement): void {
+    new Setting(root).setName("Behavior").setHeading();
 
     new Setting(root).setName("Upload on paste").addToggle((t) =>
       t.setValue(this.s.uploadOnPaste).onChange(async (v) => {
