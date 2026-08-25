@@ -1,0 +1,9 @@
+node_modules/
+
+# Build output — released via GitHub Releases, not committed
+main.js
+*.js.map
+
+# Local scratch
+.env
+*.local

@@ -1,0 +1,10 @@
+{
+  "id": "github-image-uploader",
+  "name": "GitHub Image Uploader",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Upload pasted or dropped images to a GitHub repository and insert the public link into your note.",
+  "author": "rockychang7",
+  "authorUrl": "https://github.com/rockychang7/obsidian-github-image-uploader",
+  "isDesktopOnly": false
+}
