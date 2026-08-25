@@ -1,6 +1,6 @@
 {
   "name": "obsidian-github-image-host",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Upload pasted or dropped images to a GitHub repository and insert the public link into your note.",
   "main": "main.js",
   "scripts": {

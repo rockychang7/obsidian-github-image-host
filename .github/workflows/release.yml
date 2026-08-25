@@ -1,0 +1,65 @@
+name: Release
+
+# Pushing a tag builds the plugin and publishes it. Building in CI rather than
+# on a laptop is what makes the attestation below meaningful: the artifacts are
+# provably the output of this repository at this commit, and nobody has to take
+# the maintainer's word for what went into main.js.
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # The tag and the manifest have to agree, or Obsidian installs a version
+      # that reports a different one. Catching it here beats finding out from a
+      # reviewer after the release is already public.
+      - name: Check the tag matches manifest.json
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          manifest="$(node -p "require('./manifest.json').version")"
+          if [ "$tag" != "$manifest" ]; then
+            echo "Tag $tag does not match manifest version $manifest" >&2
+            exit 1
+          fi
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
+      # Attached as loose files, not an archive: Obsidian fetches each one by
+      # name, and a zip would simply be skipped.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            main.js manifest.json styles.css \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
