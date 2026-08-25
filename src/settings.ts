@@ -9,6 +9,11 @@ import { FINE_GRAINED_TOKEN_URL, OAUTH_APP_SETUP_URL } from "./config";
 export interface GhiuSettings {
   /** Empty until the user connects; set by either auth route. */
   token: string;
+  /** Present only when the OAuth app issues expiring tokens. */
+  refreshToken: string;
+  /** Epoch milliseconds. Zero means the token does not expire. */
+  expiresAt: number;
+  refreshExpiresAt: number;
   /** Cached so settings can show who is connected without a network call. */
   login: string;
   /** Optional override for users who prefer their own OAuth app. */
@@ -35,6 +40,9 @@ export interface GhiuSettings {
 
 export const DEFAULT_SETTINGS: GhiuSettings = {
   token: "",
+  refreshToken: "",
+  expiresAt: 0,
+  refreshExpiresAt: 0,
   login: "",
   clientId: "",
 
@@ -89,17 +97,15 @@ export class GhiuSettingTab extends PluginSettingTab {
   private renderAccount(root: HTMLElement): void {
     new Setting(root).setName("Account").setHeading();
 
-    if (this.s.token) {
+    if (this.plugin.auth.isConnected()) {
       new Setting(root)
         .setName("Connected")
-        .setDesc(this.s.login ? `Signed in as ${this.s.login}` : "A token is configured")
+        .setDesc(this.plugin.auth.describe())
         .addButton((b) =>
           b.setButtonText("Disconnect").setWarning().onClick(async () => {
-            this.s.token = "";
-            this.s.login = "";
+            await this.plugin.auth.clear();
             this.repos = [];
             this.branches = [];
-            await this.save();
             this.display();
           }),
         );
@@ -124,10 +130,8 @@ export class GhiuSettingTab extends PluginSettingTab {
               );
               return;
             }
-            new DeviceFlowModal(this.app, clientId, async (token, login) => {
-              this.s.token = token;
-              this.s.login = login;
-              await this.save();
+            new DeviceFlowModal(this.app, clientId, async (tokens, login) => {
+              await this.plugin.auth.adopt(tokens, login);
               this.display();
               void this.loadRepos();
             }).open();
@@ -144,22 +148,25 @@ export class GhiuSettingTab extends PluginSettingTab {
           f.appendText(" with Contents: Read and write.");
         }),
       )
-      .addText((t) =>
-        t
-          .setPlaceholder("github_pat_...")
-          .onChange(async (value) => {
-            this.s.token = value.trim();
-            await this.save();
-          }),
-      )
+      .addText((t) => {
+        t.setPlaceholder("github_pat_...");
+        t.inputEl.type = "password";
+        t.onChange((value) => {
+          this.pendingToken = value.trim();
+        });
+      })
       .addButton((b) =>
-        b.setButtonText("Verify").onClick(async () => {
-          if (!this.s.token) return new Notice("Enter a token first");
+        b.setButtonText("Verify and save").onClick(async () => {
+          if (!this.pendingToken) return new Notice("Enter a token first");
           try {
-            this.s.login = await new GitHubClient(this.s.token).getLogin();
-            await this.save();
-            new Notice(`Token works — signed in as ${this.s.login}`);
+            const login = await GitHubClient.withToken(this.pendingToken).getLogin();
+            // A pasted token carries no expiry information, so it is stored as
+            // one that never expires and simply stops working when revoked.
+            await this.plugin.auth.adopt({ accessToken: this.pendingToken }, login);
+            new Notice(`Token works — signed in as ${login}`);
+            this.pendingToken = "";
             this.display();
+            void this.loadRepos();
           } catch (err) {
             new Notice(`Token rejected: ${message(err)}`);
           }
@@ -167,12 +174,14 @@ export class GhiuSettingTab extends PluginSettingTab {
       );
   }
 
+  private pendingToken = "";
+
   // ---- target repository ----
 
   private renderTarget(root: HTMLElement): void {
     new Setting(root).setName("Destination").setHeading();
 
-    if (!this.s.token) {
+    if (!this.plugin.auth.isConnected()) {
       root.createEl("p", {
         text: "Connect an account to choose a repository.",
         cls: "setting-item-description",
@@ -182,7 +191,9 @@ export class GhiuSettingTab extends PluginSettingTab {
 
     const repoSetting = new Setting(root)
       .setName("Repository")
-      .setDesc("Only public repositories you can push to are listed — a private repo cannot serve images.");
+      .setDesc(
+        "Only public repositories you can push to are listed — a private repo cannot serve images.",
+      );
 
     repoSetting.addDropdown((d) => {
       d.addOption("", this.repos.length ? "Select a repository" : "Load repositories first");
@@ -233,10 +244,10 @@ export class GhiuSettingTab extends PluginSettingTab {
   }
 
   private async loadRepos(): Promise<void> {
-    if (!this.s.token) return;
+    if (!this.plugin.auth.isConnected()) return;
     new Notice("Loading repositories...");
     try {
-      this.repos = await new GitHubClient(this.s.token).listRepos();
+      this.repos = await this.plugin.auth.client().listRepos();
       new Notice(`Found ${this.repos.length} repositories`);
       this.display();
     } catch (err) {
@@ -245,9 +256,9 @@ export class GhiuSettingTab extends PluginSettingTab {
   }
 
   private async loadBranches(): Promise<void> {
-    if (!this.s.token || !this.s.owner || !this.s.repo) return;
+    if (!this.plugin.auth.isConnected() || !this.s.owner || !this.s.repo) return;
     try {
-      this.branches = await new GitHubClient(this.s.token).listBranches(this.s.owner, this.s.repo);
+      this.branches = await this.plugin.auth.client().listBranches(this.s.owner, this.s.repo);
       this.display();
     } catch (err) {
       new Notice(`Could not load branches: ${message(err)}`);
@@ -331,23 +342,19 @@ export class GhiuSettingTab extends PluginSettingTab {
   private renderBehaviour(root: HTMLElement): void {
     new Setting(root).setName("Behaviour").setHeading();
 
-    new Setting(root)
-      .setName("Upload on paste")
-      .addToggle((t) =>
-        t.setValue(this.s.uploadOnPaste).onChange(async (v) => {
-          this.s.uploadOnPaste = v;
-          await this.save();
-        }),
-      );
+    new Setting(root).setName("Upload on paste").addToggle((t) =>
+      t.setValue(this.s.uploadOnPaste).onChange(async (v) => {
+        this.s.uploadOnPaste = v;
+        await this.save();
+      }),
+    );
 
-    new Setting(root)
-      .setName("Upload on drop")
-      .addToggle((t) =>
-        t.setValue(this.s.uploadOnDrop).onChange(async (v) => {
-          this.s.uploadOnDrop = v;
-          await this.save();
-        }),
-      );
+    new Setting(root).setName("Upload on drop").addToggle((t) =>
+      t.setValue(this.s.uploadOnDrop).onChange(async (v) => {
+        this.s.uploadOnDrop = v;
+        await this.save();
+      }),
+    );
 
     new Setting(root)
       .setName("Keep a local copy if upload fails")
@@ -373,12 +380,10 @@ export class GhiuSettingTab extends PluginSettingTab {
       .setName("Commit message")
       .setDesc("Supports {{filename}} and {{noteName}}.")
       .addText((t) =>
-        t
-          .setValue(this.s.commitMessage)
-          .onChange(async (value) => {
-            this.s.commitMessage = value;
-            await this.save();
-          }),
+        t.setValue(this.s.commitMessage).onChange(async (value) => {
+          this.s.commitMessage = value;
+          await this.save();
+        }),
       );
 
     new Setting(root).setName("Advanced").setHeading();
@@ -394,7 +399,7 @@ export class GhiuSettingTab extends PluginSettingTab {
       )
       .addText((t) =>
         t
-          .setPlaceholder("Iv1....")
+          .setPlaceholder("Ov23li...")
           .setValue(this.s.clientId)
           .onChange(async (value) => {
             this.s.clientId = value.trim();

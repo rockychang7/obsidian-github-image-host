@@ -1,16 +1,23 @@
 import { Editor, MarkdownFileInfo, MarkdownView, Notice, Plugin } from "obsidian";
+import { Auth } from "./auth";
 import { BUNDLED_CLIENT_ID } from "./config";
 import { DEFAULT_SETTINGS, GhiuSettingTab, GhiuSettings } from "./settings";
 import { Uploader } from "./uploader";
 
 export default class GitHubImageUploaderPlugin extends Plugin {
   settings: GhiuSettings = { ...DEFAULT_SETTINGS };
+  auth!: Auth;
   private uploader!: Uploader;
 
   async onload(): Promise<void> {
     await this.loadSettings();
 
-    this.uploader = new Uploader(this.app, () => this.settings);
+    this.auth = new Auth(
+      () => this.settings,
+      () => this.saveSettings(),
+      () => this.effectiveClientId(),
+    );
+    this.uploader = new Uploader(this.app, this.auth, () => this.settings);
     this.addSettingTab(new GhiuSettingTab(this.app, this));
 
     this.registerEvent(this.app.workspace.on("editor-paste", this.onPaste));

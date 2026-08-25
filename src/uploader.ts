@@ -8,7 +8,8 @@ import {
   arrayBufferToBase64,
   normalizePath,
 } from "obsidian";
-import { GitHubClient, isAlreadyExists } from "./github";
+import type { Auth } from "./auth";
+import { ReauthRequiredError, isAlreadyExists } from "./github";
 import { buildLink } from "./links";
 import {
   NameContext,
@@ -38,6 +39,7 @@ interface NoteRef {
 export class Uploader {
   constructor(
     private readonly app: App,
+    private readonly auth: Auth,
     private readonly getSettings: () => GhiuSettings,
   ) {}
 
@@ -48,12 +50,12 @@ export class Uploader {
   /** True when there is enough configuration to attempt an upload. */
   isReady(): boolean {
     const s = this.settings;
-    return Boolean(s.token && s.owner && s.repo && s.branch);
+    return Boolean(this.auth.isConnected() && s.owner && s.repo && s.branch);
   }
 
   describeMissing(): string {
     const s = this.settings;
-    if (!s.token) return "Connect a GitHub account in the plugin settings first.";
+    if (!this.auth.isConnected()) return "Connect a GitHub account in the plugin settings first.";
     if (!s.owner || !s.repo) return "Choose a destination repository in the plugin settings.";
     if (!s.branch) return "Choose a branch in the plugin settings.";
     return "";
@@ -168,7 +170,12 @@ export class Uploader {
       const result = await this.upload(target, note, index);
       write(embed(result.alt, result.url));
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason =
+        err instanceof ReauthRequiredError
+          ? `${err.message} (Settings -> GitHub Image Uploader)`
+          : err instanceof Error
+            ? err.message
+            : String(err);
       console.error("[github-image-uploader]", err);
 
       const fallback = this.settings.saveLocalOnFailure
@@ -196,7 +203,9 @@ export class Uploader {
 
     const s = this.settings;
     const ctx: NameContext = { noteName: note.name, ext: target.ext, now: new Date() };
-    const client = new GitHubClient(s.token);
+    // The client renews the access token on demand, so a session left open
+    // past the eight-hour expiry keeps working without the user noticing.
+    const client = this.auth.client();
     const content = arrayBufferToBase64(target.data);
 
     let lastError: unknown;

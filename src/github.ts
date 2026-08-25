@@ -1,4 +1,5 @@
 import { requestUrl, RequestUrlParam, RequestUrlResponse } from "obsidian";
+import { TokenSet, toTokenSet } from "./token";
 
 const API_ROOT = "https://api.github.com";
 const WEB_ROOT = "https://github.com";
@@ -32,6 +33,14 @@ export class GitHubError extends Error {
   }
 }
 
+/** Raised when the stored credentials cannot be renewed and the user must reconnect. */
+export class ReauthRequiredError extends GitHubError {
+  constructor(message: string) {
+    super(message, 401);
+    this.name = "ReauthRequiredError";
+  }
+}
+
 /** The user has to authorize in a browser before polling will return a token. */
 export interface DeviceCode {
   deviceCode: string;
@@ -40,6 +49,8 @@ export interface DeviceCode {
   expiresIn: number;
   interval: number;
 }
+
+export type { TokenSet } from "./token";
 
 export interface RepoInfo {
   fullName: string;
@@ -58,7 +69,7 @@ export interface UploadResult {
 
 async function send(params: RequestUrlParam): Promise<RequestUrlResponse> {
   // requestUrl goes through Obsidian's native layer, so it is not subject to
-  // CORS and works identically on desktop and mobile.
+  // CORS and behaves the same on desktop and mobile.
   return requestUrl({ ...params, throw: false });
 }
 
@@ -72,7 +83,7 @@ function readError(res: RequestUrlResponse, fallback: string): string {
   }
 }
 
-// ---- device flow (unauthenticated) ----
+// ---- device flow (no credentials needed) ----
 
 export async function requestDeviceCode(
   clientId: string,
@@ -104,22 +115,20 @@ export async function requestDeviceCode(
 }
 
 export interface PollOptions {
-  /** Called on every attempt so the UI can show a countdown. */
-  onTick?: (secondsLeft: number) => void;
-  /** Set to true to abandon polling (user closed the dialog). */
+  /** Set to true to abandon polling, for instance when the dialog is closed. */
   shouldStop?: () => boolean;
 }
 
 /**
  * Polls until the user finishes authorizing in their browser. GitHub asks
- * clients to respect `interval` and to back off by 5s whenever it says
- * `slow_down`, so both are honoured here rather than hammering the endpoint.
+ * clients to respect `interval` and to back off by five seconds whenever it
+ * answers `slow_down`, so both are honoured rather than hammering the endpoint.
  */
 export async function pollForToken(
   clientId: string,
   device: DeviceCode,
   options: PollOptions = {},
-): Promise<string> {
+): Promise<TokenSet> {
   let interval = device.interval;
   const deadline = Date.now() + device.expiresIn * 1000;
 
@@ -127,7 +136,6 @@ export async function pollForToken(
     if (options.shouldStop?.()) throw new GitHubError("Authorization cancelled", 0);
 
     await sleep(interval * 1000);
-    options.onTick?.(Math.max(0, Math.round((deadline - Date.now()) / 1000)));
 
     const res = await send({
       url: ACCESS_TOKEN_URL,
@@ -142,7 +150,7 @@ export async function pollForToken(
 
     const body = (res.json ?? {}) as Record<string, string>;
 
-    if (body.access_token) return body.access_token;
+    if (body.access_token) return toTokenSet(body, Date.now());
 
     switch (body.error) {
       case "authorization_pending":
@@ -160,6 +168,49 @@ export async function pollForToken(
   throw new GitHubError("Authorization timed out — please try again", 0);
 }
 
+/**
+ * Exchanges a refresh token for a fresh pair.
+ *
+ * Notably this needs no client secret either: GitHub requires one "unless the
+ * user access token was generated using the device flow". Without that carve-out
+ * an open-source client could not support expiring tokens at all, and would be
+ * stuck asking for credentials that never expire.
+ */
+export async function refreshAccessToken(
+  clientId: string,
+  refreshToken: string,
+): Promise<TokenSet> {
+  const res = await send({
+    url: ACCESS_TOKEN_URL,
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: clientId,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+
+  const body = (res.json ?? {}) as Record<string, string>;
+  if (body.access_token) return toTokenSet(body, Date.now());
+
+  // Only a definite answer from GitHub means the saved login is beyond saving.
+  // Anything else — a malformed body, a 5xx, a captive portal — is treated as a
+  // transient failure, because discarding working credentials over a blip would
+  // force the user to re-authorize for no reason.
+  if (body.error) {
+    throw new ReauthRequiredError(
+      body.error_description || describeDeviceError(body.error) || "Could not refresh access",
+    );
+  }
+
+  throw new GitHubError(
+    readError(res, `Could not refresh access (HTTP ${res.status})`),
+    res.status,
+    body,
+  );
+}
+
 function describeDeviceError(code: string): string {
   switch (code) {
     case "expired_token":
@@ -167,13 +218,15 @@ function describeDeviceError(code: string): string {
     case "access_denied":
       return "Authorization was denied on GitHub";
     case "device_flow_disabled":
-      return "Device flow is not enabled for this OAuth app";
+      return 'Device flow is not enabled for this OAuth app — turn on "Enable Device Flow" in its settings';
     case "incorrect_client_credentials":
       return "The client ID is not valid";
     case "unsupported_grant_type":
       return "GitHub rejected the grant type";
+    case "bad_refresh_token":
+      return "The saved login has expired — please connect again";
     default:
-      return `GitHub returned: ${code}`;
+      return code ? `GitHub returned: ${code}` : "";
   }
 }
 
@@ -183,20 +236,29 @@ function sleep(ms: number): Promise<void> {
 
 // ---- authenticated calls ----
 
+/** Resolves to a currently valid access token, refreshing first if necessary. */
+export type TokenProvider = () => string | Promise<string>;
+
 export class GitHubClient {
-  constructor(private readonly token: string) {}
+  constructor(private readonly getToken: TokenProvider) {}
+
+  /** Convenience for one-off calls with a token that needs no renewal. */
+  static withToken(token: string): GitHubClient {
+    return new GitHubClient(() => token);
+  }
 
   private async call(
     path: string,
     init: Partial<RequestUrlParam> = {},
   ): Promise<RequestUrlResponse> {
+    const token = await this.getToken();
     return send({
       url: path.startsWith("http") ? path : `${API_ROOT}${path}`,
       method: "GET",
       ...init,
       headers: {
         Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${this.token}`,
+        Authorization: `Bearer ${token}`,
         "X-GitHub-Api-Version": API_VERSION,
         ...(init.body ? { "Content-Type": "application/json" } : {}),
         ...init.headers,
@@ -213,8 +275,8 @@ export class GitHubClient {
   }
 
   /**
-   * Only public repos are listed: a private one cannot serve images anyway,
-   * so offering it would just let the user pick a target that silently fails.
+   * Only public repositories are listed: a private one cannot serve images, so
+   * offering it would just let someone pick a target that silently fails.
    */
   async listRepos(): Promise<RepoInfo[]> {
     const found: RepoInfo[] = [];

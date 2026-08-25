@@ -13,7 +13,7 @@
  * To create one: GitHub Settings -> Developer settings -> OAuth Apps -> New OAuth
  * App, then turn on "Enable Device Flow" in the app's settings. It is off by default.
  */
-export const BUNDLED_CLIENT_ID = "";
+export const BUNDLED_CLIENT_ID = "Ov23licPFHIBNf61LXsM";
 
 export const OAUTH_APP_SETUP_URL = "https://github.com/settings/developers";
 export const FINE_GRAINED_TOKEN_URL = "https://github.com/settings/personal-access-tokens/new";

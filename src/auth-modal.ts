@@ -3,6 +3,7 @@ import {
   DeviceCode,
   DEFAULT_SCOPE,
   GitHubClient,
+  TokenSet,
   requestDeviceCode,
   pollForToken,
 } from "./github";
@@ -21,7 +22,7 @@ export class DeviceFlowModal extends Modal {
   constructor(
     app: App,
     private readonly clientId: string,
-    private readonly onSuccess: (token: string, login: string) => void | Promise<void>,
+    private readonly onSuccess: (tokens: TokenSet, login: string) => void | Promise<void>,
   ) {
     super(app);
   }
@@ -58,12 +59,12 @@ export class DeviceFlowModal extends Modal {
     this.showCode(device);
 
     try {
-      const token = await pollForToken(this.clientId, device, {
+      const tokens = await pollForToken(this.clientId, device, {
         shouldStop: () => this.cancelled,
       });
-      const login = await new GitHubClient(token).getLogin();
+      const login = await GitHubClient.withToken(tokens.accessToken).getLogin();
       if (this.cancelled) return;
-      await this.onSuccess(token, login);
+      await this.onSuccess(tokens, login);
       new Notice(`Connected to GitHub as ${login}`);
       this.close();
     } catch (err) {

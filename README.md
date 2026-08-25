@@ -32,9 +32,11 @@ Two ways, pick either:
 
 **Browser flow** — click **Connect**, then enter the code shown on `github.com/login/device`. Nothing to create, nothing to copy.
 
-**Personal access token** — paste a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with **Contents: Read and write**. This is the narrower option: a fine-grained token can be limited to one single repository, tighter than the `public_repo` scope the browser flow requests.
+Access lasts eight hours and renews itself in the background for six months, after which you connect once more. Renewal needs no client secret, because GitHub waives that requirement for tokens issued through the device flow — which is the only reason an open-source client can use expiring tokens at all.
 
-> The browser flow needs an OAuth app's client ID. If the build you are running does not ship one, register your own (**GitHub Settings -> Developer settings -> OAuth Apps**), turn on **Enable Device Flow** in its settings — it is off by default — and paste the client ID under **Advanced**.
+**Personal access token** — paste a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with **Contents: Read and write**. This is the narrower option: a fine-grained token can be limited to one single repository, tighter than the `public_repo` scope the browser flow requests. Such a token does not expire and is never renewed; it simply stops working when you revoke it.
+
+> Forking this plugin? Register your own OAuth app (**GitHub Settings -> Developer settings -> OAuth Apps**), turn on **Enable Device Flow** in its settings — it is off by default — and replace the client ID in `src/config.ts`. Users can also paste their own under **Advanced**.
 
 ### 2. Pick a destination
 
@@ -93,7 +95,7 @@ npm run install-local -- "C:/path/to/vault"    # copy the build into a vault
 
 After reinstalling, run **Reload app without saving** from the command palette.
 
-`src/naming.ts`, `src/links.ts` and `src/refs.ts` import nothing from Obsidian, which is what lets the tests run under plain Node.
+`src/naming.ts`, `src/links.ts`, `src/refs.ts` and `src/token.ts` import nothing from Obsidian, which is what lets the tests run under plain Node. Those four hold the rules worth being sure about: how names are generated, which embeds get rewritten, how URLs are built, and when credentials are considered expired.
 
 ## License
 

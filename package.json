@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "test": "node --experimental-strip-types --test tests/logic.test.ts",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
     "check": "npm run test && npm run build",
     "install-local": "node scripts/install-local.mjs"
   },
