@@ -1,4 +1,4 @@
-# GitHub Image Uploader
+# GitHub Image Host
 
 An Obsidian plugin that uploads images to a GitHub repository as you paste them, and writes the public link into your note.
 
@@ -19,12 +19,12 @@ It also asks for the `public_repo` scope and nothing else, so **it cannot read o
 Not yet in the community plugin browser. Until then:
 
 1. Download `main.js`, `manifest.json` and `styles.css` from the [latest release](../../releases/latest).
-2. Put them in `<vault>/.obsidian/plugins/github-image-uploader/`.
+2. Put them in `<vault>/.obsidian/plugins/github-image-host/`.
 3. Enable the plugin in **Settings -> Community plugins**.
 
 ## Setup
 
-Open **Settings -> GitHub Image Uploader**.
+Open **Settings -> GitHub Image Host**.
 
 ### 1. Connect an account
 

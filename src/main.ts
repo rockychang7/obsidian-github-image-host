@@ -84,7 +84,7 @@ export default class GitHubImageUploaderPlugin extends Plugin {
     if (evt.defaultPrevented || !files.length) return;
 
     if (!this.uploader.isReady()) {
-      new Notice(`GitHub Image Uploader: ${this.uploader.describeMissing()}`);
+      new Notice(`GitHub Image Host: ${this.uploader.describeMissing()}`);
       return; // let Obsidian handle it normally
     }
 
@@ -94,7 +94,7 @@ export default class GitHubImageUploaderPlugin extends Plugin {
 
   private requireConfigured(): boolean {
     if (this.uploader.isReady()) return true;
-    new Notice(`GitHub Image Uploader: ${this.uploader.describeMissing()}`);
+    new Notice(`GitHub Image Host: ${this.uploader.describeMissing()}`);
     return false;
   }
 }

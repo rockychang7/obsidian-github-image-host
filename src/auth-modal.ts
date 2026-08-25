@@ -42,7 +42,7 @@ export class DeviceFlowModal extends Modal {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
       text: "Requesting a code from GitHub...",
-      cls: "ghiu-status",
+      cls: "ghih-status",
     });
   }
 
@@ -80,7 +80,7 @@ export class DeviceFlowModal extends Modal {
       text: "Enter this code on GitHub to finish connecting. This window updates by itself once you are done.",
     });
 
-    const code = contentEl.createDiv({ cls: "ghiu-code" });
+    const code = contentEl.createDiv({ cls: "ghih-code" });
     code.setText(device.userCode);
 
     new Setting(contentEl)
@@ -101,22 +101,22 @@ export class DeviceFlowModal extends Modal {
 
     contentEl.createEl("p", {
       text: `Waiting for authorization at ${device.verificationUri}`,
-      cls: "ghiu-status",
+      cls: "ghih-status",
     });
 
     contentEl.createEl("p", {
       text: "The plugin asks only for the public_repo scope, so it cannot see or touch your private repositories.",
-      cls: "ghiu-hint",
+      cls: "ghih-hint",
     });
   }
 
   private showError(err: unknown): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("p", { text: "Could not connect", cls: "ghiu-error" });
+    contentEl.createEl("p", { text: "Could not connect", cls: "ghih-error" });
     contentEl.createEl("p", {
       text: err instanceof Error ? err.message : String(err),
-      cls: "ghiu-status",
+      cls: "ghih-status",
     });
     new Setting(contentEl).addButton((b) =>
       b

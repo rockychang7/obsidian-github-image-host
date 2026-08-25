@@ -1,4 +1,4 @@
-.ghiu-code {
+.ghih-code {
   font-family: var(--font-monospace);
   font-size: 2em;
   font-weight: 600;
@@ -12,22 +12,22 @@
   user-select: all;
 }
 
-.ghiu-status {
+.ghih-status {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
 }
 
-.ghiu-hint {
+.ghih-hint {
   color: var(--text-faint);
   font-size: var(--font-ui-smaller);
 }
 
-.ghiu-error {
+.ghih-error {
   color: var(--text-error);
   font-weight: 600;
 }
 
-.ghiu-preview {
+.ghih-preview {
   font-family: var(--font-monospace);
   word-break: break-all;
 }

@@ -270,7 +270,7 @@ export class GhiuSettingTab extends PluginSettingTab {
   private renderNaming(root: HTMLElement): void {
     new Setting(root).setName("File names").setHeading();
 
-    const preview = root.createEl("p", { cls: "setting-item-description ghiu-preview" });
+    const preview = root.createEl("p", { cls: "setting-item-description ghih-preview" });
     const refresh = () => {
       const sample = this.app.workspace.getActiveFile()?.basename ?? "My note";
       preview.setText(

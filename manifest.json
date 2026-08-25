@@ -1,6 +1,6 @@
 {
-  "id": "github-image-uploader",
-  "name": "GitHub Image Uploader",
+  "id": "github-image-host",
+  "name": "GitHub Image Host",
   "version": "0.1.0",
   "minAppVersion": "1.6.6",
   "description": "Upload pasted or dropped images to a GitHub repository and insert the public link into your note.",

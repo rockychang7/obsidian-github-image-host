@@ -148,7 +148,7 @@ export class Uploader {
         }
       } catch (err) {
         failed++;
-        console.error("[github-image-uploader]", err);
+        console.error("[github-image-host]", err);
       }
     }
 
@@ -172,11 +172,11 @@ export class Uploader {
     } catch (err) {
       const reason =
         err instanceof ReauthRequiredError
-          ? `${err.message} (Settings -> GitHub Image Uploader)`
+          ? `${err.message} (Settings -> GitHub Image Host)`
           : err instanceof Error
             ? err.message
             : String(err);
-      console.error("[github-image-uploader]", err);
+      console.error("[github-image-host]", err);
 
       const fallback = this.settings.saveLocalOnFailure
         ? await this.saveLocally(target, note).catch(() => null)
